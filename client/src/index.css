@@ -393,6 +393,67 @@ a:hover { text-decoration: underline; }
   margin-bottom: 20px;
 }
 
+/* ===== Source Type Tabs ===== */
+.source-type-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  padding: 4px;
+  background: var(--color-bg);
+  border-radius: var(--radius);
+}
+
+.source-type-tab {
+  flex: 1;
+  padding: 10px 16px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.source-type-tab:hover {
+  color: var(--color-text);
+}
+
+.source-type-tab.active {
+  background: var(--color-surface);
+  color: var(--color-primary);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.readonly-field {
+  padding: 10px 12px;
+  background: var(--color-bg);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+}
+
+.service-badges {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.badge-source-git { background: #eef2ff; color: var(--color-primary); }
+.badge-source-zip { background: #fef3c7; color: var(--color-warning); }
+
+.modal-desc {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+}
+
 /* ===== Responsive ===== */
 @media (max-width: 768px) {
   .sidebar { display: none; }
