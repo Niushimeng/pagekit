@@ -2,7 +2,9 @@ import QRCode from 'qrcode';
 import config from '../config';
 
 export function generateQrCodeUrl(serviceName: string): string {
-  return `${config.host}/${serviceName}`;
+  // 去掉 host 尾部斜杠，服务路径以 / 结尾（与 Nginx 目录访问一致，避免 301 丢端口）
+  const base = config.host.replace(/\/+$/, '');
+  return `${base}/${serviceName}/`;
 }
 
 export async function generateQrCodeBuffer(serviceName: string): Promise<Buffer> {
