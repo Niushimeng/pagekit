@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  pagekit:
+    build: .
+    container_name: pagekit
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config.json:/app/config.json:ro
+      - pagekit-data:/data/app
+      - sites-data:/data/sites
+
+  nginx:
+    image: nginx:alpine
+    container_name: pagekit-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - sites-data:/data/sites:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - pagekit
+
+volumes:
+  pagekit-data:
+  sites-data:
