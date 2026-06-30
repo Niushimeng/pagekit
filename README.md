@@ -6,6 +6,7 @@
 
 - 🔐 账号密码登录
 - 📦 服务管理（添加、编辑、删除）
+- 🌿 分支自动拉取（填写仓库地址和凭证后，从远程获取分支列表供选择）
 - 🚀 一键发布/取消发布
 - 🔄 手动更新 / Gogs Webhook 自动更新
 - 🔑 凭证管理（Git 用户名密码，可复用）
@@ -50,11 +51,34 @@ vim config.json
 npm run dev
 # 后端: http://localhost:3000
 # 前端: http://localhost:5173 (自动代理 /api 到后端)
+# 默认登录: admin / change-me（见 config.json 中 admin 配置）
 ```
+
+本地开发时，`config.json` 中的目录路径应使用项目内相对路径（如 `./data/sites`），详见下方配置说明。
 
 ## 配置说明
 
-`config.json`:
+`config.json` 中相对路径（以 `./` 开头）会基于项目根目录解析；绝对路径（如 Docker 中的 `/data/sites`）保持不变。
+
+**本地开发示例：**
+
+```json
+{
+  "port": 3000,
+  "host": "http://localhost:3000",
+  "admin": {
+    "username": "admin",
+    "password": "change-me"
+  },
+  "jwtSecret": "change-this-to-a-random-string",
+  "dataDir": "./data",
+  "publishDir": "./data/sites",
+  "tmpDir": "./data/sites/.tmp",
+  "oldDir": "./data/sites/.old"
+}
+```
+
+**Docker 部署示例：**
 
 ```json
 {
@@ -76,21 +100,27 @@ npm run dev
 |------|------|
 | `port` | 后端服务端口 |
 | `host` | 对外访问地址，用于生成二维码和链接 |
-| `admin` | 管理员账号密码 |
+| `admin` | 管理员账号密码（默认 `admin` / `change-me`，部署前请修改） |
 | `jwtSecret` | JWT 签名密钥 |
-| `dataDir` | 数据库和缓存目录 |
+| `dataDir` | 数据库和 Git 缓存目录 |
 | `publishDir` | 已发布文件存放目录 |
 | `tmpDir` | 更新时的临时目录 |
 | `oldDir` | 更新时的旧版本备份目录 |
 
 ## 工作流程
 
+### 添加服务
+
+1. 填写 Git 仓库地址
+2. 选择凭证（Git 用户名密码）
+3. 系统自动从远程拉取分支列表，选择目标分支（优先默认 `main` / `master`）
+4. 可选填写发布目录（如 `dist`，留空则发布仓库根目录）
+
 ### 发布
 
-1. 用户填写 Git 仓库地址、凭证、分支、发布目录
-2. 点击"发布"
-3. 系统 clone 仓库 → 拷贝发布目录 → 原子切换到发布位置
-4. 自动通过 Gogs API 创建 Webhook
+1. 在服务列表点击「发布」
+2. 系统 clone 仓库 → 拷贝发布目录 → 原子切换到发布位置
+3. 自动通过 Gogs API 创建 Webhook
 
 ### 自动更新
 
@@ -100,4 +130,4 @@ npm run dev
 
 ### Nginx 配置
 
-系统只负责将文件写入 `/data/sites/<service-name>/`，由外部 Nginx 提供 HTTP 服务。参见 `nginx.conf`。
+系统只负责将文件写入 `publishDir/<service-name>/`（Docker 下为 `/data/sites/<service-name>/`），由外部 Nginx 提供 HTTP 服务。参见 `nginx.conf`。

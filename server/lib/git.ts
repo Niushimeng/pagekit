@@ -13,6 +13,45 @@ function buildGitUrl(gitUrl: string, username: string, password: string): string
   return url.toString();
 }
 
+/** 解析 git ls-remote 输出为分支名列表 */
+function parseRemoteBranchOutput(output: string): string[] {
+  return output
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line) => {
+      const ref = line.split('\t')[1];
+      if (ref?.startsWith('refs/heads/')) {
+        return ref.slice('refs/heads/'.length);
+      }
+      return null;
+    })
+    .filter((name): name is string => !!name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/** 从远程仓库获取分支列表 */
+export async function listRemoteBranches(gitUrl: string, credentialId: string): Promise<string[]> {
+  const cred = Credential.getByIdWithPassword(credentialId);
+  if (!cred) throw new Error('凭证不存在');
+
+  const authUrl = buildGitUrl(gitUrl, cred.username, cred.password);
+  const git = simpleGit();
+  // listRemote 返回原始字符串，不是对象
+  const output = await git.listRemote(['--heads', authUrl]);
+  return parseRemoteBranchOutput(output);
+}
+
+/** 优先选择 main / master 等常见默认分支 */
+export function pickDefaultBranch(branches: string[]): string | null {
+  if (branches.length === 0) return null;
+  const preferred = ['main', 'master', 'develop'];
+  for (const name of preferred) {
+    if (branches.includes(name)) return name;
+  }
+  return branches[0];
+}
+
 export async function cloneRepo(service: ServiceRow, targetDir: string): Promise<SimpleGit> {
   const cred = Credential.getByIdWithPassword(service.credential_id);
   if (!cred) throw new Error('凭证不存在');

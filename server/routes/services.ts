@@ -4,8 +4,25 @@ import { Log } from '../models/log';
 import { AuthRequest } from '../auth';
 import { publishService, unpublishService, updateService, deleteService } from '../lib/publish';
 import { generateQrCodeBuffer, generateQrCodeUrl } from '../lib/qrcode';
+import { listRemoteBranches, pickDefaultBranch } from '../lib/git';
 
 const router = Router();
+
+// GET /api/services/branches?git_url=...&credential_id=...
+router.get('/branches', async (req: AuthRequest, res: Response) => {
+  const { git_url, credential_id } = req.query;
+  if (!git_url || !credential_id) {
+    res.status(400).json({ error: 'Git 地址和凭证不能为空' });
+    return;
+  }
+
+  try {
+    const branches = await listRemoteBranches(git_url as string, credential_id as string);
+    res.json({ branches, defaultBranch: pickDefaultBranch(branches) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message || '获取分支失败' });
+  }
+});
 
 // GET /api/services
 router.get('/', (req: AuthRequest, res: Response) => {

@@ -48,6 +48,10 @@ export const deleteCredential = (id: string) =>
   request<any>(`/credentials/${id}`, { method: 'DELETE' });
 
 // Services
+export const getRemoteBranches = (gitUrl: string, credentialId: string) =>
+  request<{ branches: string[]; defaultBranch: string | null }>(
+    `/services/branches?git_url=${encodeURIComponent(gitUrl)}&credential_id=${encodeURIComponent(credentialId)}`
+  );
 export const getServices = () => request<any[]>('/services');
 export const getService = (id: string) => request<any>(`/services/${id}`);
 export const createService = (data: any) =>

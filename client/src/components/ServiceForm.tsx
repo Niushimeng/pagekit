@@ -10,11 +10,15 @@ export default function ServiceForm() {
   const [name, setName] = useState('');
   const [gitUrl, setGitUrl] = useState('');
   const [credentialId, setCredentialId] = useState('');
-  const [branch, setBranch] = useState('main');
+  const [branch, setBranch] = useState('');
   const [publishDir, setPublishDir] = useState('');
   const [credentials, setCredentials] = useState<any[]>([]);
+  const [branches, setBranches] = useState<string[]>([]);
+  const [branchesLoading, setBranchesLoading] = useState(false);
+  const [branchesError, setBranchesError] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [initialBranch, setInitialBranch] = useState('');
 
   useEffect(() => {
     api.getCredentials().then(setCredentials);
@@ -24,10 +28,63 @@ export default function ServiceForm() {
         setGitUrl(s.git_url);
         setCredentialId(s.credential_id);
         setBranch(s.branch);
+        setInitialBranch(s.branch);
         setPublishDir(s.publish_dir);
       });
     }
   }, [id]);
+
+  // 填写仓库地址并选择凭证后，自动拉取远程分支
+  useEffect(() => {
+    if (!gitUrl.trim() || !credentialId) {
+      setBranches([]);
+      setBranchesError('');
+      if (!isEdit) setBranch('');
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setBranchesLoading(true);
+      setBranchesError('');
+      try {
+        const data = await api.getRemoteBranches(gitUrl.trim(), credentialId);
+        if (cancelled) return;
+
+        setBranches(data.branches);
+        if (data.branches.length === 0) {
+          setBranch('');
+          setBranchesError('远程仓库没有可用分支');
+          return;
+        }
+
+        // 编辑时保留原分支；新建或原分支不存在时选默认分支
+        const keepCurrent = branch && data.branches.includes(branch);
+        const keepInitial = initialBranch && data.branches.includes(initialBranch);
+        if (keepCurrent) {
+          setBranch(branch);
+        } else if (keepInitial) {
+          setBranch(initialBranch);
+        } else if (data.defaultBranch) {
+          setBranch(data.defaultBranch);
+        } else {
+          setBranch(data.branches[0]);
+        }
+      } catch (err: any) {
+        if (cancelled) return;
+        setBranches([]);
+        setBranch('');
+        setBranchesError(err.message || '获取分支失败');
+      } finally {
+        if (!cancelled) setBranchesLoading(false);
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [gitUrl, credentialId]);
 
   // Auto-extract repo name from git URL
   const handleGitUrlChange = (url: string) => {
@@ -43,6 +100,12 @@ export default function ServiceForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    if (!branch) {
+      setError('请选择分支');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -58,6 +121,8 @@ export default function ServiceForm() {
       setLoading(false);
     }
   };
+
+  const canSelectBranch = !!gitUrl.trim() && !!credentialId;
 
   return (
     <div className="page">
@@ -79,6 +144,17 @@ export default function ServiceForm() {
           />
         </div>
 
+        <div className="form-group">
+          <label>凭证 *</label>
+          <select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} required>
+            <option value="">请选择凭证</option>
+            {credentials.map((c) => (
+              <option key={c.id} value={c.id}>{c.name} ({c.username})</option>
+            ))}
+          </select>
+          <small>还没有凭证？<a href="#" onClick={(e) => { e.preventDefault(); navigate('/credentials'); }}>去创建</a></small>
+        </div>
+
         <div className="form-row">
           <div className="form-group">
             <label>服务名称 *</label>
@@ -95,25 +171,27 @@ export default function ServiceForm() {
           </div>
 
           <div className="form-group">
-            <label>分支</label>
-            <input
-              type="text"
+            <label>分支 *</label>
+            <select
               value={branch}
               onChange={(e) => setBranch(e.target.value)}
-              placeholder="main"
-            />
+              required
+              disabled={!canSelectBranch || branchesLoading || branches.length === 0}
+            >
+              {!canSelectBranch && <option value="">请先填写仓库地址并选择凭证</option>}
+              {canSelectBranch && branchesLoading && <option value="">加载分支中...</option>}
+              {canSelectBranch && !branchesLoading && branches.length === 0 && (
+                <option value="">无可用分支</option>
+              )}
+              {branches.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+            </select>
+            {branchesError && <small className="text-error">{branchesError}</small>}
+            {canSelectBranch && !branchesLoading && branches.length > 0 && (
+              <small>已从远程仓库拉取 {branches.length} 个分支</small>
+            )}
           </div>
-        </div>
-
-        <div className="form-group">
-          <label>凭证 *</label>
-          <select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} required>
-            <option value="">请选择凭证</option>
-            {credentials.map((c) => (
-              <option key={c.id} value={c.id}>{c.name} ({c.username})</option>
-            ))}
-          </select>
-          <small>还没有凭证？<a href="#" onClick={(e) => { e.preventDefault(); navigate('/credentials'); }}>去创建</a></small>
         </div>
 
         <div className="form-group">
@@ -128,7 +206,7 @@ export default function ServiceForm() {
         </div>
 
         <div className="form-actions">
-          <button type="submit" className="btn btn-primary" disabled={loading}>
+          <button type="submit" className="btn btn-primary" disabled={loading || branchesLoading || !branch}>
             {loading ? '保存中...' : (isEdit ? '保存' : '创建')}
           </button>
           <button type="button" className="btn btn-ghost" onClick={() => navigate('/')}>取消</button>

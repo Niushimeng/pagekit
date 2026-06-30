@@ -5,7 +5,7 @@ A lightweight service publishing system. Users register git repositories and bra
 ## Language
 
 **Service (服务)**:
-A binding of one git repository + one branch. Each service has independent publish/unpublish/update operations.
+A binding of one git repository + one branch. Each service has independent publish/unpublish/update operations. When creating a service, branches are fetched from the remote repository via the selected credential and chosen from a dropdown (not manually typed).
 _Avoid_: Site, project, app
 
 **Credential (凭证)**:
@@ -29,5 +29,5 @@ A subdirectory path within the repo (e.g. `dist/`, `build/`) whose contents beco
 _Avoid_: Output directory, build folder
 
 **Serving Location (发布位置)**:
-The filesystem path where published files are placed for the external web server to serve: `/data/sites/<service-name>/`.
+The filesystem path where published files are placed for the external web server to serve: `<publishDir>/<service-name>/` (Docker default: `/data/sites/<service-name>/`; local dev default: `./data/sites/<service-name>/`).
 _Avoid_: Output path, site root

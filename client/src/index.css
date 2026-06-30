@@ -212,6 +212,9 @@ a:hover { text-decoration: underline; }
   font-size: 0.82rem;
   color: var(--color-text-secondary);
 }
+.form-group small.text-error {
+  color: var(--color-error);
+}
 
 .form-row {
   display: grid;
