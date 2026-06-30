@@ -129,7 +129,24 @@ export async function fetchServiceQrCodeBlobUrl(id: string): Promise<string> {
   return URL.createObjectURL(blob);
 }
 
-export const getServiceQrCodeUrl = (id: string) => request<{ url: string }>(`/services/${id}/qrcode-url`);
+export const getServicePublicUrl = (id: string) =>
+  request<{ url: string }>(`/services/${id}/qrcode-url`);
+
+/** 写入剪贴板（兼容非 HTTPS 环境） */
+export async function copyTextToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  document.body.removeChild(textarea);
+}
 
 // Logs
 export const getAllLogs = (limit?: number) =>

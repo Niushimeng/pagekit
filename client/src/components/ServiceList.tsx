@@ -62,7 +62,7 @@ export default function ServiceList() {
 
     Promise.all([
       api.fetchServiceQrCodeBlobUrl(qrModal.id),
-      api.getServiceQrCodeUrl(qrModal.id),
+      api.getServicePublicUrl(qrModal.id),
     ])
       .then(([url, data]) => {
         if (cancelled) {
@@ -127,14 +127,18 @@ export default function ServiceList() {
     setError('');
   };
 
-  const handleCopyQrUrl = async () => {
-    if (!qrPublicUrl) return;
+  const handleCopyQrUrl = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!qrModal) return;
     try {
-      await navigator.clipboard.writeText(qrPublicUrl);
+      // 复制对外访问 URL（host + 服务名），不是服务 ID 或 API 路径
+      const { url } = await api.getServicePublicUrl(qrModal.id);
+      await api.copyTextToClipboard(url);
+      setQrPublicUrl(url);
       setQrCopied(true);
       setTimeout(() => setQrCopied(false), 2000);
     } catch {
-      setError('复制失败');
+      setError('复制 URL 失败');
     }
   };
 
@@ -277,7 +281,8 @@ export default function ServiceList() {
                 <button
                   type="button"
                   className="icon-btn"
-                  title={qrCopied ? '已复制' : '复制链接'}
+                  title={qrCopied ? 'URL 已复制' : '复制 URL'}
+                  aria-label={qrCopied ? 'URL 已复制' : '复制 URL'}
                   onClick={handleCopyQrUrl}
                 >
                   {qrCopied ? (
