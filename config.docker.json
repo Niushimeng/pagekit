@@ -1,6 +1,6 @@
 {
   "port": 3000,
-  "host": "http://localhost:3000",
+  "host": "http://nas.featv.com:13080",
   "admin": {
     "username": "admin",
     "password": "change-me"
