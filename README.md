@@ -25,17 +25,20 @@
 ### 使用 Docker（推荐）
 
 ```bash
-# 1. 编辑配置
-cp config.json config.json.bak
-vim config.json  # 修改 host、账号密码等
+# 1. 编辑 Docker 专用配置（dataDir 等路径已指向 /data 卷）
+cp config.docker.json config.docker.json.bak
+vim config.docker.json  # 修改 host、admin 账号密码、jwtSecret 等
 
-# 2. 启动
+# 2. 启动（首次启动会自动检测 /data/app，若无数据库则初始化并创建管理员账号）
 docker-compose up -d
 
 # 3. 访问
 # 管理后台: http://localhost:3000
 # 已发布服务: http://localhost (Nginx)
+# 默认登录: admin / change-me（见 config.docker.json 中 admin 配置，部署前请修改）
 ```
+
+首次启动时，容器会检测 `dataDir`（Docker 下为 `/data/app`）下是否存在 `pagekit.db`；若不存在则自动创建目录结构、初始化 SQLite 数据库，并在日志中输出管理员账号信息。
 
 ### 本地开发
 
@@ -78,7 +81,7 @@ npm run dev
 }
 ```
 
-**Docker 部署示例：**
+**Docker 部署示例（见 `config.docker.json`）：**
 
 ```json
 {
@@ -89,7 +92,7 @@ npm run dev
     "password": "change-me"
   },
   "jwtSecret": "change-this-to-a-random-string",
-  "dataDir": "./data",
+  "dataDir": "/data/app",
   "publishDir": "/data/sites",
   "tmpDir": "/data/sites/.tmp",
   "oldDir": "/data/sites/.old"

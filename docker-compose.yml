@@ -9,7 +9,8 @@ services:
       - "80:80"       # Nginx：已发布静态站点
       - "3000:3000"   # 管理后台
     volumes:
-      - ./config.json:/app/config.json:ro
+      # Docker 专用配置：dataDir 指向持久化卷 /data/app
+      - ./config.docker.json:/app/config.json:ro
       - pagekit-data:/data
 
 volumes:

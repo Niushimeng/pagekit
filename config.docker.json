@@ -1,0 +1,14 @@
+{
+  "port": 3000,
+  "host": "http://localhost:3000",
+  "admin": {
+    "username": "admin",
+    "password": "change-me"
+  },
+  "jwtSecret": "change-this-to-a-random-string",
+  "dataDir": "/data/app",
+  "publishDir": "/data/sites",
+  "tmpDir": "/data/sites/.tmp",
+  "oldDir": "/data/sites/.old",
+  "maxArchiveSize": 52428800
+}
