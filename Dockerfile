@@ -1,17 +1,13 @@
-# 构建阶段：在 debian:13-slim 上编译服务端与前端
-FROM debian:13-slim AS builder
+# 构建阶段：编译服务端与前端（含 better-sqlite3 等原生模块）
+FROM node:20-bookworm-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git python3 make g++ ca-certificates \
+    git python3 make g++ \
     && rm -rf /var/lib/apt/lists/*
-
-# 从官方 Node 镜像复制运行时，避免 NodeSource 对 Debian 13 的兼容问题
-COPY --from=node:20-bookworm-slim /usr/local /usr/local
-ENV PATH="/usr/local/bin:$PATH"
 
 WORKDIR /app
 
-# 安装服务端依赖（better-sqlite3 等原生模块需在此阶段编译）
+# 安装服务端依赖
 COPY package.json package-lock.json* ./
 RUN npm ci --production
 
@@ -26,15 +22,12 @@ COPY client/ ./client/
 RUN cd client && npm run build
 
 # 运行阶段：Nginx + Node 同容器
-FROM debian:13-slim
+FROM node:20-bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nginx git ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /etc/nginx/sites-enabled/default
-
-COPY --from=node:20-bookworm-slim /usr/local /usr/local
-ENV PATH="/usr/local/bin:$PATH"
 
 WORKDIR /app
 
