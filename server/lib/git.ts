@@ -85,6 +85,12 @@ export async function pullRepo(repoDir: string, service: ServiceRow): Promise<vo
   await git.pull('origin', service.branch || 'main');
 }
 
+/** 获取本地仓库当前 HEAD commit hash */
+export async function getRepoCommitHash(repoDir: string): Promise<string> {
+  const git = simpleGit(repoDir);
+  return git.revparse(['HEAD']);
+}
+
 export async function setupWebhook(service: ServiceRow): Promise<string | null> {
   if (!service.credential_id || !service.git_url) return null;
   const cred = Credential.getByIdWithPassword(service.credential_id);

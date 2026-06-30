@@ -38,6 +38,12 @@ export interface ServiceRow {
   webhook_id: string | null;
   last_publish_at: string | null;
   last_update_at: string | null;
+  /** 是否开启定时更新（仅 git 服务） */
+  auto_update_enabled: number;
+  /** 定时更新间隔（分钟） */
+  auto_update_interval: number;
+  last_deployed_commit: string | null;
+  last_scheduled_at: string | null;
   created_at: string;
   updated_at: string;
   credential_name?: string;

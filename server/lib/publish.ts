@@ -3,9 +3,14 @@ import fs from 'fs-extra';
 import config from '../config';
 import { Service } from '../models/service';
 import { Log } from '../models/log';
-import { cloneRepo, pullRepo, setupWebhook, deleteWebhook } from './git';
+import { cloneRepo, pullRepo, setupWebhook, deleteWebhook, getRepoCommitHash } from './git';
 import { extractArchive, hasArchive, removeArchive } from './archive';
 import { ServiceRow } from '../types';
+
+export type UpdateSource = 'manual' | 'webhook' | 'scheduled';
+
+/** 服务级更新锁，防止并发 pull/切换 */
+const updatingServices = new Set<string>();
 
 function getServiceServePath(serviceName: string): string {
   return path.join(config.publishDir, serviceName);
@@ -46,14 +51,24 @@ async function atomicSwitch(serviceName: string, tmpDir: string): Promise<void> 
   await fs.remove(oldPath);
 }
 
-async function publishGitService(service: ServiceRow): Promise<void> {
-  const cacheDir = getServiceCachePath(service.name);
+async function switchGitPublishDir(
+  service: ServiceRow,
+  cacheDir: string,
+  commitHash: string
+): Promise<void> {
   const tmpDir = getServiceTmpPath(service.name);
-
-  await cloneRepo(service, cacheDir);
   await fs.remove(tmpDir);
   await copyPublishDir(cacheDir, service.publish_dir, tmpDir);
   await atomicSwitch(service.name, tmpDir);
+  Service.setLastDeployedCommit(service.id, commitHash);
+}
+
+async function publishGitService(service: ServiceRow): Promise<void> {
+  const cacheDir = getServiceCachePath(service.name);
+
+  await cloneRepo(service, cacheDir);
+  const commitHash = await getRepoCommitHash(cacheDir);
+  await switchGitPublishDir(service, cacheDir, commitHash);
 
   Service.updateStatus(service.id, 'published');
 
@@ -103,7 +118,6 @@ export async function unpublishService(service: ServiceRow): Promise<void> {
     await deleteWebhook(service);
     Service.setWebhookId(service.id, null);
   }
-  // zip 服务保留存档包，便于重新发布
 
   Service.updateStatus(service.id, 'unpublished');
 
@@ -115,15 +129,20 @@ export async function unpublishService(service: ServiceRow): Promise<void> {
   });
 }
 
-async function updateGitService(service: ServiceRow): Promise<void> {
+/** Git 更新：pull 后比对 commit，有变才切换 */
+async function updateGitServiceInternal(service: ServiceRow): Promise<'updated' | 'unchanged'> {
   const cacheDir = getServiceCachePath(service.name);
-  const tmpDir = getServiceTmpPath(service.name);
 
   await pullRepo(cacheDir, service);
-  await fs.remove(tmpDir);
-  await copyPublishDir(cacheDir, service.publish_dir, tmpDir);
-  await atomicSwitch(service.name, tmpDir);
+  const commitHash = await getRepoCommitHash(cacheDir);
+
+  if (service.last_deployed_commit && service.last_deployed_commit === commitHash) {
+    return 'unchanged';
+  }
+
+  await switchGitPublishDir(service, cacheDir, commitHash);
   Service.updateLastUpdate(service.id);
+  return 'updated';
 }
 
 async function updateZipService(service: ServiceRow): Promise<void> {
@@ -140,34 +159,84 @@ async function updateZipService(service: ServiceRow): Promise<void> {
   Service.updateLastUpdate(service.id);
 }
 
-export async function updateService(service: ServiceRow): Promise<void> {
+function logUpdateResult(
+  service: ServiceRow,
+  source: UpdateSource,
+  result: 'updated' | 'unchanged',
+  status: 'success' | 'error' = 'success',
+  message?: string
+): void {
+  if (source === 'scheduled') {
+    if (result === 'unchanged') return;
+    Log.create({
+      service_id: service.id,
+      action: 'scheduled',
+      status,
+      message: message || (status === 'success' ? '定时更新成功' : '定时更新失败'),
+    });
+    return;
+  }
+
+  const action = 'update';
+  if (result === 'unchanged') {
+    Log.create({
+      service_id: service.id,
+      action,
+      status: 'success',
+      message: message || '已是最新版本',
+    });
+    return;
+  }
+
+  Log.create({
+    service_id: service.id,
+    action,
+    status,
+    message: message || '更新成功',
+  });
+}
+
+export async function updateService(service: ServiceRow, source: UpdateSource = 'manual'): Promise<void> {
+  if (updatingServices.has(service.id)) {
+    return;
+  }
+
+  updatingServices.add(service.id);
   try {
     if (service.source_type === 'zip') {
       await updateZipService(service);
-    } else {
-      const cacheDir = getServiceCachePath(service.name);
-      // 缓存不存在时走完整发布流程
-      if (!await fs.pathExists(cacheDir)) {
-        await publishService(service);
-        return;
-      }
-      await updateGitService(service);
+      logUpdateResult(service, source, 'updated');
+      return;
     }
 
-    Log.create({
-      service_id: service.id,
-      action: 'update',
-      status: 'success',
-      message: '更新成功',
-    });
+    const cacheDir = getServiceCachePath(service.name);
+    if (!await fs.pathExists(cacheDir)) {
+      updatingServices.delete(service.id);
+      await publishService(service);
+      return;
+    }
+
+    const result = await updateGitServiceInternal(service);
+    logUpdateResult(service, source, result);
   } catch (err: any) {
-    Log.create({
-      service_id: service.id,
-      action: 'update',
-      status: 'error',
-      message: err.message || '更新失败',
-    });
+    if (source === 'scheduled') {
+      Log.create({
+        service_id: service.id,
+        action: 'scheduled',
+        status: 'error',
+        message: err.message || '定时更新失败',
+      });
+    } else {
+      Log.create({
+        service_id: service.id,
+        action: 'update',
+        status: 'error',
+        message: err.message || '更新失败',
+      });
+    }
     throw err;
+  } finally {
+    updatingServices.delete(service.id);
   }
 }
 

@@ -48,7 +48,10 @@ router.get('/:id', async (req: AuthRequest, res: Response) => {
 
 // POST /api/services
 router.post('/', (req: AuthRequest, res: Response) => {
-  const { name, source_type, git_url, credential_id, branch, publish_dir } = req.body;
+  const {
+    name, source_type, git_url, credential_id, branch, publish_dir,
+    auto_update_enabled, auto_update_interval,
+  } = req.body;
   const type = source_type || 'git';
 
   if (!name) {
@@ -84,6 +87,8 @@ router.post('/', (req: AuthRequest, res: Response) => {
       credential_id,
       branch,
       publish_dir,
+      auto_update_enabled: type === 'git' ? !!auto_update_enabled : false,
+      auto_update_interval: type === 'git' ? auto_update_interval : undefined,
     });
     res.status(201).json(service);
   } catch (err: any) {
@@ -93,7 +98,10 @@ router.post('/', (req: AuthRequest, res: Response) => {
 
 // PUT /api/services/:id
 router.put('/:id', (req: AuthRequest, res: Response) => {
-  const { name, git_url, credential_id, branch, publish_dir } = req.body;
+  const {
+    name, git_url, credential_id, branch, publish_dir,
+    auto_update_enabled, auto_update_interval,
+  } = req.body;
 
   if (name && !validateServiceName(name)) {
     res.status(400).json({ error: '服务名只能包含字母、数字、下划线和连字符' });
@@ -113,6 +121,10 @@ router.put('/:id', (req: AuthRequest, res: Response) => {
     credential_id: existing.source_type === 'git' ? credential_id : undefined,
     branch: existing.source_type === 'git' ? branch : undefined,
     publish_dir,
+    auto_update_enabled: existing.source_type === 'git' && auto_update_enabled !== undefined
+      ? !!auto_update_enabled
+      : undefined,
+    auto_update_interval: existing.source_type === 'git' ? auto_update_interval : undefined,
   });
 
   res.json(service);

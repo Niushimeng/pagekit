@@ -13,7 +13,7 @@ How a service obtains its static files. `git` — pull from a remote repository 
 _Avoid_: Deploy type, service mode
 
 **Git Service (Git 服务)**:
-A service whose source type is `git`. Requires a repository URL, credential, and branch. Supports webhook-triggered updates.
+A service whose source type is `git`. Requires a repository URL, credential, and branch. Supports webhook-triggered updates and optional scheduled updates (polling), which coexist independently.
 _Avoid_: Repo service
 
 **Zip Service (Zip 服务)**:
@@ -37,8 +37,12 @@ Remove published files from the serving location so the service is no longer acc
 _Avoid_: Take offline, suspend
 
 **Update (更新)**:
-Replace the serving files with a new version and atomically switch. For git services: pull latest code (or webhook-triggered). For zip services: optionally upload a new archive to replace the stored archive, then extract; if no new archive is provided, re-extract the existing stored archive with the current configuration.
+Replace the serving files with a new version and atomically switch. For git services: pull latest code (triggered manually, via webhook, or via scheduled update). For zip services: optionally upload a new archive to replace the stored archive, then extract; if no new archive is provided, re-extract the existing stored archive with the current configuration.
 _Avoid_: Refresh, sync
+
+**Scheduled Update (定时更新)**:
+A git-service option that periodically pulls the remote repository at a configured interval, specified in minutes (default: 1, minimum: 1). Disabled by default; configurable when creating or editing a git service. Coexists with webhook updates; both trigger the same Update flow. After pull, compares the commit hash with the last deployed version — if unchanged, skips copy and atomic switch silently (no log entry). Runs only while the service is published; pauses on unpublish and resumes on re-publish. Concurrent update attempts on the same service are skipped while an update is already in progress. A single global scheduler tick (every 30 seconds) checks all eligible services against their configured intervals. Logs success only when a new version is deployed; logs errors on pull failure.
+_Avoid_: Auto deploy, cron job, polling
 
 **Publish Directory (发布目录)**:
 A subdirectory path within the source tree (repo root or extracted zip root) whose contents become the served files. Defaults to the root when empty.

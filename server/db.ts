@@ -34,6 +34,10 @@ db.exec(`
     webhook_id TEXT,
     last_publish_at TEXT,
     last_update_at TEXT,
+    auto_update_enabled INTEGER NOT NULL DEFAULT 0,
+    auto_update_interval INTEGER NOT NULL DEFAULT 1,
+    last_deployed_commit TEXT,
+    last_scheduled_at TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (credential_id) REFERENCES credentials(id)
@@ -85,6 +89,17 @@ if (!hasSourceType && serviceColumns.length > 0) {
     FROM services;
     DROP TABLE services;
     ALTER TABLE services_new RENAME TO services;
+  `);
+}
+
+// 旧库迁移：增加定时更新字段
+const serviceColumnsAfter = db.prepare('PRAGMA table_info(services)').all() as { name: string }[];
+if (!serviceColumnsAfter.some((c) => c.name === 'auto_update_enabled')) {
+  db.exec(`
+    ALTER TABLE services ADD COLUMN auto_update_enabled INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE services ADD COLUMN auto_update_interval INTEGER NOT NULL DEFAULT 1;
+    ALTER TABLE services ADD COLUMN last_deployed_commit TEXT;
+    ALTER TABLE services ADD COLUMN last_scheduled_at TEXT;
   `);
 }
 

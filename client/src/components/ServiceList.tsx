@@ -11,6 +11,8 @@ interface Service {
   status: string;
   credential_name?: string;
   has_archive?: boolean;
+  auto_update_enabled?: number;
+  auto_update_interval?: number;
   last_publish_at: string | null;
   last_update_at: string | null;
 }
@@ -121,6 +123,12 @@ export default function ServiceList() {
                     <div className="service-info">
                       <span className="label">凭证:</span> <span className="value">{s.credential_name || '-'}</span>
                     </div>
+                    {!!s.auto_update_enabled && (
+                      <div className="service-info">
+                        <span className="label">自动更新:</span>
+                        <span className="value">每 {s.auto_update_interval || 1} 分钟</span>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <div className="service-info">

@@ -65,7 +65,7 @@ router.post('/:serviceId/:secret', async (req: Request, res: Response) => {
     message: '收到 webhook 回调，开始更新',
   });
 
-  updateService(service).catch((err) => {
+  updateService(service, 'webhook').catch((err) => {
     console.error(`Webhook update failed for ${service.name}:`, err.message);
   });
 

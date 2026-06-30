@@ -22,6 +22,8 @@ export default function ServiceForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [initialBranch, setInitialBranch] = useState('');
+  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false);
+  const [autoUpdateInterval, setAutoUpdateInterval] = useState(1);
 
   useEffect(() => {
     api.getCredentials().then(setCredentials);
@@ -35,6 +37,8 @@ export default function ServiceForm() {
         setInitialBranch(s.branch || '');
         setPublishDir(s.publish_dir || '');
         setHasArchive(!!s.has_archive);
+        setAutoUpdateEnabled(!!s.auto_update_enabled);
+        setAutoUpdateInterval(s.auto_update_interval || 1);
       });
     }
   }, [id]);
@@ -114,7 +118,11 @@ export default function ServiceForm() {
     try {
       if (isEdit) {
         if (sourceType === 'git') {
-          await api.updateService(id!, { name, git_url: gitUrl, credential_id: credentialId, branch, publish_dir: publishDir });
+          await api.updateService(id!, {
+            name, git_url: gitUrl, credential_id: credentialId, branch, publish_dir: publishDir,
+            auto_update_enabled: autoUpdateEnabled,
+            auto_update_interval: autoUpdateInterval,
+          });
         } else {
           await api.updateService(id!, { name, publish_dir: publishDir });
           if (archiveFile) {
@@ -124,7 +132,13 @@ export default function ServiceForm() {
       } else {
         const payload: any = { name, source_type: sourceType, publish_dir: publishDir };
         if (sourceType === 'git') {
-          Object.assign(payload, { git_url: gitUrl, credential_id: credentialId, branch });
+          Object.assign(payload, {
+            git_url: gitUrl,
+            credential_id: credentialId,
+            branch,
+            auto_update_enabled: autoUpdateEnabled,
+            auto_update_interval: autoUpdateInterval,
+          });
         }
         const service = await api.createService(payload);
         if (sourceType === 'zip' && archiveFile) {
@@ -253,6 +267,32 @@ export default function ServiceForm() {
           />
           <small>{sourceType === 'git' ? '相对于仓库根目录的子目录路径' : '相对于 zip 解压根目录的子目录路径'}</small>
         </div>
+
+        {sourceType === 'git' && (
+          <div className="form-group auto-update-group">
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={autoUpdateEnabled}
+                onChange={(e) => setAutoUpdateEnabled(e.target.checked)}
+              />
+              自动更新
+            </label>
+            <div className="auto-update-interval">
+              <label>拉取频率</label>
+              <input
+                type="number"
+                min={1}
+                max={1440}
+                value={autoUpdateInterval}
+                onChange={(e) => setAutoUpdateInterval(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                disabled={!autoUpdateEnabled}
+              />
+              <span>分钟</span>
+            </div>
+            <small>已发布时按频率自动 pull；与 Webhook 并存，无新提交则跳过切换</small>
+          </div>
+        )}
 
         {sourceType === 'zip' && (
           <div className="form-group">

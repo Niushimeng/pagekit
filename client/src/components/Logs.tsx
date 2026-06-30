@@ -16,6 +16,8 @@ const ACTION_LABELS: Record<string, string> = {
   unpublish: '取消发布',
   update: '更新',
   webhook: 'Webhook 触发',
+  scheduled: '定时更新',
+  upload: '上传存档包',
   delete: '删除',
 };
 

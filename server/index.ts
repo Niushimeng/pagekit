@@ -10,6 +10,7 @@ import serviceRoutes from './routes/services';
 import webhookRoutes from './routes/webhook';
 import logRoutes from './routes/logs';
 import configRoutes from './routes/config';
+import { startScheduler } from './lib/scheduler';
 
 const app = express();
 
@@ -44,4 +45,5 @@ if (fs.existsSync(clientDist)) {
 app.listen(config.port, () => {
   console.log(`Pagekit server running on port ${config.port}`);
   console.log(`Host: ${config.host}`);
+  startScheduler();
 });
