@@ -2,17 +2,12 @@ version: '3.8'
 
 services:
   pagekit:
-    build: .
-    container_name: pagekit
+    image: pagekit:latest
     restart: unless-stopped
     ports:
-      - "80:80"       # Nginx：已发布静态站点
-      - "3000:3000"   # 管理后台
+      - "13080:80"       # Nginx：已发布静态站点
+      - "13000:3000"   # 管理后台
     volumes:
-      # Docker 专用配置：dataDir 指向持久化卷 /data/app
       - ./config.docker.json:/app/config.json:ro
-      - pagekit-data:/data
+      - ./data:/data
 
-volumes:
-  pagekit-data:
-  sites-data:

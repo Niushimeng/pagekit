@@ -22,6 +22,10 @@ export default function ServiceList() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState<{ id: string; name: string } | null>(null);
+  const [qrImageUrl, setQrImageUrl] = useState<string | null>(null);
+  const [qrPublicUrl, setQrPublicUrl] = useState('');
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrCopied, setQrCopied] = useState(false);
   const [updateModal, setUpdateModal] = useState<Service | null>(null);
   const [updateFile, setUpdateFile] = useState<File | null>(null);
   const [error, setError] = useState('');
@@ -38,6 +42,49 @@ export default function ServiceList() {
   };
 
   useEffect(() => { load(); }, []);
+
+  // 打开二维码弹窗时，带 JWT 拉取图片（img src 无法携带 Authorization）
+  useEffect(() => {
+    if (!qrModal) {
+      setQrImageUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setQrPublicUrl('');
+      setQrCopied(false);
+      return;
+    }
+
+    let cancelled = false;
+    let blobUrl: string | null = null;
+    setQrLoading(true);
+    setError('');
+
+    Promise.all([
+      api.fetchServiceQrCodeBlobUrl(qrModal.id),
+      api.getServiceQrCodeUrl(qrModal.id),
+    ])
+      .then(([url, data]) => {
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        blobUrl = url;
+        setQrImageUrl(url);
+        setQrPublicUrl(data.url);
+      })
+      .catch((err: any) => {
+        if (!cancelled) setError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setQrLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [qrModal]);
 
   const handleAction = async (id: string, action: string) => {
     setActionLoading(`${id}-${action}`);
@@ -78,6 +125,25 @@ export default function ServiceList() {
     setUpdateModal(service);
     setUpdateFile(null);
     setError('');
+  };
+
+  const handleCopyQrUrl = async () => {
+    if (!qrPublicUrl) return;
+    try {
+      await navigator.clipboard.writeText(qrPublicUrl);
+      setQrCopied(true);
+      setTimeout(() => setQrCopied(false), 2000);
+    } catch {
+      setError('复制失败');
+    }
+  };
+
+  const handleDownloadQrCode = () => {
+    if (!qrImageUrl || !qrModal) return;
+    const link = document.createElement('a');
+    link.href = qrImageUrl;
+    link.download = `${qrModal.name}-qrcode.png`;
+    link.click();
   };
 
   if (loading) return <div className="page-loading">加载中...</div>;
@@ -200,9 +266,43 @@ export default function ServiceList() {
           <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h3>二维码 - {qrModal.name}</h3>
             <div className="qr-code-container">
-              <img src={api.getServiceQrCodeUrl(qrModal.id)} alt="QR Code" />
+              {qrLoading && <p>加载中...</p>}
+              {qrImageUrl && !qrLoading && (
+                <img src={qrImageUrl} alt="QR Code" />
+              )}
             </div>
-            <button className="btn btn-primary" onClick={() => setQrModal(null)}>关闭</button>
+            {qrPublicUrl && (
+              <div className="qr-url-row">
+                <p className="qr-url">{qrPublicUrl}</p>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  title={qrCopied ? '已复制' : '复制链接'}
+                  onClick={handleCopyQrUrl}
+                >
+                  {qrCopied ? (
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path fill="currentColor" d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                      <path fill="currentColor" d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={!qrImageUrl || qrLoading}
+                onClick={handleDownloadQrCode}
+              >
+                下载二维码
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => setQrModal(null)}>关闭</button>
+            </div>
           </div>
         </div>
       )}

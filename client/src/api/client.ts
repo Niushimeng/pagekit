@@ -106,7 +106,30 @@ export const updateServiceCode = (id: string, file?: File) => {
   return request<any>(`/services/${id}/update`, { method: 'POST' });
 };
 export const getServiceLogs = (id: string) => request<any[]>(`/services/${id}/logs`);
-export const getServiceQrCodeUrl = (id: string) => `/api/services/${id}/qrcode`;
+
+/** 带 JWT 拉取二维码 PNG，转为 blob URL 供 <img> 使用（img 标签无法携带 Authorization） */
+export async function fetchServiceQrCodeBlobUrl(id: string): Promise<string> {
+  const token = getToken();
+  const res = await fetch(`${BASE}/services/${id}/qrcode`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+
+  if (res.status === 401) {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
+    throw new Error('未登录');
+  }
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || '加载二维码失败');
+  }
+
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+export const getServiceQrCodeUrl = (id: string) => request<{ url: string }>(`/services/${id}/qrcode-url`);
 
 // Logs
 export const getAllLogs = (limit?: number) =>
