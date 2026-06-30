@@ -9,5 +9,6 @@
   "dataDir": "./data",
   "publishDir": "./data/sites",
   "tmpDir": "./data/sites/.tmp",
-  "oldDir": "./data/sites/.old"
+  "oldDir": "./data/sites/.old",
+  "maxArchiveSize": 52428800
 }

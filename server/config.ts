@@ -17,6 +17,7 @@ const config: AppConfig = {
   publishDir: resolveConfigPath(raw.publishDir),
   tmpDir: resolveConfigPath(raw.tmpDir),
   oldDir: resolveConfigPath(raw.oldDir),
+  maxArchiveSize: raw.maxArchiveSize ?? 50 * 1024 * 1024,
 };
 
 export default config;

@@ -16,6 +16,12 @@ router.post('/:serviceId/:secret', async (req: Request, res: Response) => {
     return;
   }
 
+  // Zip 服务不支持 webhook
+  if (service.source_type === 'zip') {
+    res.status(400).json({ error: 'Zip 服务不支持 webhook' });
+    return;
+  }
+
   // Verify webhook secret matches
   if (service.webhook_secret !== secret) {
     res.status(403).json({ error: '密钥无效' });

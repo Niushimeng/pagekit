@@ -24,9 +24,10 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS services (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
-    git_url TEXT NOT NULL,
-    credential_id TEXT NOT NULL,
-    branch TEXT NOT NULL DEFAULT 'main',
+    source_type TEXT NOT NULL DEFAULT 'git',
+    git_url TEXT,
+    credential_id TEXT,
+    branch TEXT DEFAULT 'main',
     publish_dir TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'unpublished',
     webhook_secret TEXT,
@@ -48,5 +49,43 @@ db.exec(`
     FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
   );
 `);
+
+// 旧库迁移：增加 source_type，Git 字段改为可空
+const serviceColumns = db.prepare('PRAGMA table_info(services)').all() as { name: string }[];
+const hasSourceType = serviceColumns.some((c) => c.name === 'source_type');
+
+if (!hasSourceType && serviceColumns.length > 0) {
+  db.exec(`
+    CREATE TABLE services_new (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      source_type TEXT NOT NULL DEFAULT 'git',
+      git_url TEXT,
+      credential_id TEXT,
+      branch TEXT DEFAULT 'main',
+      publish_dir TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'unpublished',
+      webhook_secret TEXT,
+      webhook_id TEXT,
+      last_publish_at TEXT,
+      last_update_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (credential_id) REFERENCES credentials(id)
+    );
+    INSERT INTO services_new (
+      id, name, source_type, git_url, credential_id, branch, publish_dir,
+      status, webhook_secret, webhook_id, last_publish_at, last_update_at,
+      created_at, updated_at
+    )
+    SELECT
+      id, name, 'git', git_url, credential_id, branch, publish_dir,
+      status, webhook_secret, webhook_id, last_publish_at, last_update_at,
+      created_at, updated_at
+    FROM services;
+    DROP TABLE services;
+    ALTER TABLE services_new RENAME TO services;
+  `);
+}
 
 export default db;

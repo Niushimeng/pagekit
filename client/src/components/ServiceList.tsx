@@ -5,10 +5,12 @@ import * as api from '../api/client';
 interface Service {
   id: string;
   name: string;
-  git_url: string;
-  branch: string;
+  source_type: api.SourceType;
+  git_url: string | null;
+  branch: string | null;
   status: string;
-  credential_name: string;
+  credential_name?: string;
+  has_archive?: boolean;
   last_publish_at: string | null;
   last_update_at: string | null;
 }
@@ -18,6 +20,8 @@ export default function ServiceList() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [qrModal, setQrModal] = useState<{ id: string; name: string } | null>(null);
+  const [updateModal, setUpdateModal] = useState<Service | null>(null);
+  const [updateFile, setUpdateFile] = useState<File | null>(null);
   const [error, setError] = useState('');
 
   const load = async () => {
@@ -52,6 +56,28 @@ export default function ServiceList() {
     }
   };
 
+  const handleZipUpdate = async () => {
+    if (!updateModal) return;
+    setActionLoading(`${updateModal.id}-update`);
+    setError('');
+    try {
+      await api.updateServiceCode(updateModal.id, updateFile || undefined);
+      setUpdateModal(null);
+      setUpdateFile(null);
+      await load();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const openUpdateModal = (service: Service) => {
+    setUpdateModal(service);
+    setUpdateFile(null);
+    setError('');
+  };
+
   if (loading) return <div className="page-loading">加载中...</div>;
 
   return (
@@ -74,20 +100,34 @@ export default function ServiceList() {
             <div key={s.id} className={`service-card ${s.status === 'published' ? 'published' : ''}`}>
               <div className="service-card-header">
                 <h3>{s.name}</h3>
-                <span className={`badge badge-${s.status}`}>
-                  {s.status === 'published' ? '已发布' : '未发布'}
-                </span>
+                <div className="service-badges">
+                  <span className={`badge badge-source-${s.source_type}`}>
+                    {s.source_type === 'zip' ? 'Zip' : 'Git'}
+                  </span>
+                  <span className={`badge badge-${s.status}`}>
+                    {s.status === 'published' ? '已发布' : '未发布'}
+                  </span>
+                </div>
               </div>
               <div className="service-card-body">
-                <div className="service-info">
-                  <span className="label">仓库:</span> <span className="value mono">{s.git_url}</span>
-                </div>
-                <div className="service-info">
-                  <span className="label">分支:</span> <span className="value mono">{s.branch}</span>
-                </div>
-                <div className="service-info">
-                  <span className="label">凭证:</span> <span className="value">{s.credential_name || '-'}</span>
-                </div>
+                {s.source_type === 'git' ? (
+                  <>
+                    <div className="service-info">
+                      <span className="label">仓库:</span> <span className="value mono">{s.git_url}</span>
+                    </div>
+                    <div className="service-info">
+                      <span className="label">分支:</span> <span className="value mono">{s.branch}</span>
+                    </div>
+                    <div className="service-info">
+                      <span className="label">凭证:</span> <span className="value">{s.credential_name || '-'}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="service-info">
+                    <span className="label">存档包:</span>
+                    <span className="value">{s.has_archive ? '已上传' : '未上传'}</span>
+                  </div>
+                )}
                 {s.last_publish_at && (
                   <div className="service-info">
                     <span className="label">发布时间:</span> <span className="value">{new Date(s.last_publish_at).toLocaleString('zh-CN')}</span>
@@ -103,7 +143,8 @@ export default function ServiceList() {
                 {s.status === 'unpublished' ? (
                   <button
                     className="btn btn-primary btn-sm"
-                    disabled={actionLoading === `${s.id}-publish`}
+                    disabled={actionLoading === `${s.id}-publish` || (s.source_type === 'zip' && !s.has_archive)}
+                    title={s.source_type === 'zip' && !s.has_archive ? '请先上传 zip 存档包' : undefined}
                     onClick={() => handleAction(s.id, 'publish')}
                   >
                     {actionLoading === `${s.id}-publish` ? '发布中...' : '发布'}
@@ -113,7 +154,7 @@ export default function ServiceList() {
                     <button
                       className="btn btn-success btn-sm"
                       disabled={actionLoading === `${s.id}-update`}
-                      onClick={() => handleAction(s.id, 'update')}
+                      onClick={() => s.source_type === 'zip' ? openUpdateModal(s) : handleAction(s.id, 'update')}
                     >
                       {actionLoading === `${s.id}-update` ? '更新中...' : '更新'}
                     </button>
@@ -153,8 +194,34 @@ export default function ServiceList() {
             <div className="qr-code-container">
               <img src={api.getServiceQrCodeUrl(qrModal.id)} alt="QR Code" />
             </div>
-            <p className="qr-url">{api.getServiceQrCodeUrl(qrModal.name)}</p>
             <button className="btn btn-primary" onClick={() => setQrModal(null)}>关闭</button>
+          </div>
+        </div>
+      )}
+
+      {updateModal && (
+        <div className="modal-overlay" onClick={() => { setUpdateModal(null); setUpdateFile(null); }}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <h3>更新 - {updateModal.name}</h3>
+            <p className="modal-desc">可选择新的 zip 文件替换存档包；留空则从现有存档包重新解压发布。</p>
+            <div className="form-group">
+              <label>新 Zip 文件（可选）</label>
+              <input
+                type="file"
+                accept=".zip"
+                onChange={(e) => setUpdateFile(e.target.files?.[0] || null)}
+              />
+            </div>
+            <div className="modal-actions">
+              <button
+                className="btn btn-success"
+                disabled={actionLoading === `${updateModal.id}-update`}
+                onClick={handleZipUpdate}
+              >
+                {actionLoading === `${updateModal.id}-update` ? '更新中...' : '确认更新'}
+              </button>
+              <button className="btn btn-ghost" onClick={() => { setUpdateModal(null); setUpdateFile(null); }}>取消</button>
+            </div>
           </div>
         </div>
       )}

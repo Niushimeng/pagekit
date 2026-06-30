@@ -1,31 +1,47 @@
 # Pagekit
 
-A lightweight service publishing system. Users register git repositories and branches as "services," then publish their static files to a public URL with auto-generated QR codes and Gogs webhooks for continuous delivery.
+A lightweight service publishing system. Users register static resource sources as "services" and publish them to a public URL with auto-generated QR codes.
 
 ## Language
 
 **Service (服务)**:
-A binding of one git repository + one branch. Each service has independent publish/unpublish/update operations. When creating a service, branches are fetched from the remote repository via the selected credential and chosen from a dropdown (not manually typed).
+A named, independently publishable static resource source. Each service has its own publish/unpublish/update lifecycle, serving location, and QR code. Services differ by source type (git or zip).
 _Avoid_: Site, project, app
 
+**Source Type (来源类型)**:
+How a service obtains its static files. `git` — pull from a remote repository and branch; `zip` — extract from an uploaded archive. Chosen at creation and cannot be changed afterward.
+_Avoid_: Deploy type, service mode
+
+**Git Service (Git 服务)**:
+A service whose source type is `git`. Requires a repository URL, credential, and branch. Supports webhook-triggered updates.
+_Avoid_: Repo service
+
+**Zip Service (Zip 服务)**:
+A service whose source type is `zip`. Static files come from an uploaded zip archive; no git credential or branch is involved. A zip may be uploaded when creating the service or at publish/update time. The archive is extracted as-is; the extracted root is the source tree (same role as a git repo root).
+_Avoid_: Upload service, package service
+
+**Stored Archive (存档包)**:
+The latest uploaded zip file kept on disk for a zip service. Uploaded via a dedicated archive endpoint, separate from publish/update. Publish and update both read from this archive; update replaces it with a newly uploaded zip before extracting. Upload size is limited by server configuration (default 50MB). Path traversal entries inside the archive are rejected.
+_Avoid_: Cached zip, package file
+
 **Credential (凭证)**:
-A reusable git username + password pair, referenced by one or more services.
+A reusable git username + password pair, referenced by git services only.
 _Avoid_: Account, key, token
 
 **Publish (发布)**:
-Pull code from the service's git repo and branch, copy the configured publish directory to the serving location, and make it publicly accessible.
+Extract or pull the service's source files, copy the configured publish directory to the serving location, and make them publicly accessible. For git services: clone the repo. For zip services: extract the stored archive (must exist before publish). Saving configuration changes (such as publish directory) does not automatically republish; the user must trigger publish or update explicitly.
 _Avoid_: Deploy, release
 
 **Unpublish (取消发布)**:
-Remove published files so the service is no longer accessible, while keeping the service record for future re-publishing.
+Remove published files from the serving location so the service is no longer accessible. The service record and source artifacts (git cache or stored archive) are kept for future re-publishing.
 _Avoid_: Take offline, suspend
 
 **Update (更新)**:
-Pull the latest code and atomically switch the serving files to the new version. Can be triggered manually or via webhook.
+Replace the serving files with a new version and atomically switch. For git services: pull latest code (or webhook-triggered). For zip services: optionally upload a new archive to replace the stored archive, then extract; if no new archive is provided, re-extract the existing stored archive with the current configuration.
 _Avoid_: Refresh, sync
 
 **Publish Directory (发布目录)**:
-A subdirectory path within the repo (e.g. `dist/`, `build/`) whose contents become the served files. Defaults to the repo root when empty.
+A subdirectory path within the source tree (repo root or extracted zip root) whose contents become the served files. Defaults to the root when empty.
 _Avoid_: Output directory, build folder
 
 **Serving Location (发布位置)**:

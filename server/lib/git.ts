@@ -53,6 +53,9 @@ export function pickDefaultBranch(branches: string[]): string | null {
 }
 
 export async function cloneRepo(service: ServiceRow, targetDir: string): Promise<SimpleGit> {
+  if (!service.credential_id || !service.git_url) {
+    throw new Error('Git 服务缺少仓库或凭证配置');
+  }
   const cred = Credential.getByIdWithPassword(service.credential_id);
   if (!cred) throw new Error('凭证不存在');
 
@@ -63,11 +66,14 @@ export async function cloneRepo(service: ServiceRow, targetDir: string): Promise
   await fs.ensureDir(targetDir);
 
   const git = simpleGit();
-  await git.clone(authUrl, targetDir, ['--branch', service.branch, '--single-branch', '--depth', '1']);
+  await git.clone(authUrl, targetDir, ['--branch', service.branch || 'main', '--single-branch', '--depth', '1']);
   return simpleGit(targetDir);
 }
 
 export async function pullRepo(repoDir: string, service: ServiceRow): Promise<void> {
+  if (!service.credential_id || !service.git_url) {
+    throw new Error('Git 服务缺少仓库或凭证配置');
+  }
   const cred = Credential.getByIdWithPassword(service.credential_id);
   if (!cred) throw new Error('凭证不存在');
 
@@ -76,10 +82,11 @@ export async function pullRepo(repoDir: string, service: ServiceRow): Promise<vo
 
   // Update remote URL with fresh credentials
   await git.remote(['set-url', 'origin', authUrl]);
-  await git.pull('origin', service.branch);
+  await git.pull('origin', service.branch || 'main');
 }
 
 export async function setupWebhook(service: ServiceRow): Promise<string | null> {
+  if (!service.credential_id || !service.git_url) return null;
   const cred = Credential.getByIdWithPassword(service.credential_id);
   if (!cred) return null;
 
@@ -125,7 +132,7 @@ export async function setupWebhook(service: ServiceRow): Promise<string | null> 
 }
 
 export async function deleteWebhook(service: ServiceRow): Promise<void> {
-  if (!service.webhook_id) return;
+  if (!service.webhook_id || !service.credential_id || !service.git_url) return;
 
   const cred = Credential.getByIdWithPassword(service.credential_id);
   if (!cred) return;

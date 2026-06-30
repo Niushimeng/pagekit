@@ -4,6 +4,7 @@ import config from '../config';
 import { Service } from '../models/service';
 import { Log } from '../models/log';
 import { cloneRepo, pullRepo, setupWebhook, deleteWebhook } from './git';
+import { extractArchive, hasArchive, removeArchive } from './archive';
 import { ServiceRow } from '../types';
 
 function getServiceServePath(serviceName: string): string {
@@ -22,10 +23,10 @@ function getServiceCachePath(serviceName: string): string {
   return path.join(config.dataDir, 'repos', serviceName);
 }
 
-async function copyPublishDir(repoDir: string, publishDir: string, targetDir: string): Promise<void> {
-  const source = publishDir ? path.join(repoDir, publishDir) : repoDir;
+async function copyPublishDir(sourceRoot: string, publishDir: string, targetDir: string): Promise<void> {
+  const source = publishDir ? path.join(sourceRoot, publishDir) : sourceRoot;
   if (!await fs.pathExists(source)) {
-    throw new Error(`发布目录不存在: ${publishDir}`);
+    throw new Error(`发布目录不存在: ${publishDir || '(根目录)'}`);
   }
   await fs.ensureDir(targetDir);
   await fs.copy(source, targetDir);
@@ -35,42 +36,53 @@ async function atomicSwitch(serviceName: string, tmpDir: string): Promise<void> 
   const servePath = getServiceServePath(serviceName);
   const oldPath = getServiceOldPath(serviceName);
 
-  // Remove old backup if exists
   await fs.remove(oldPath);
 
-  // Move current to backup
   if (await fs.pathExists(servePath)) {
     await fs.rename(servePath, oldPath);
   }
 
-  // Move tmp to serve
   await fs.rename(tmpDir, servePath);
-
-  // Clean up backup
   await fs.remove(oldPath);
 }
 
-export async function publishService(service: ServiceRow): Promise<void> {
+async function publishGitService(service: ServiceRow): Promise<void> {
   const cacheDir = getServiceCachePath(service.name);
   const tmpDir = getServiceTmpPath(service.name);
 
-  // Clone repo to cache
   await cloneRepo(service, cacheDir);
-
-  // Copy publish dir to tmp
   await fs.remove(tmpDir);
   await copyPublishDir(cacheDir, service.publish_dir, tmpDir);
-
-  // Atomic switch
   await atomicSwitch(service.name, tmpDir);
 
-  // Update status
   Service.updateStatus(service.id, 'published');
 
-  // Setup webhook
   const webhookId = await setupWebhook(service);
   if (webhookId) {
     Service.setWebhookId(service.id, webhookId);
+  }
+}
+
+async function publishZipService(service: ServiceRow): Promise<void> {
+  if (!await hasArchive(service.name)) {
+    throw new Error('存档包不存在，请先上传 zip 文件');
+  }
+
+  const tmpDir = getServiceTmpPath(service.name);
+  const extractDir = await extractArchive(service.name);
+
+  await fs.remove(tmpDir);
+  await copyPublishDir(extractDir, service.publish_dir, tmpDir);
+  await atomicSwitch(service.name, tmpDir);
+
+  Service.updateStatus(service.id, 'published');
+}
+
+export async function publishService(service: ServiceRow): Promise<void> {
+  if (service.source_type === 'zip') {
+    await publishZipService(service);
+  } else {
+    await publishGitService(service);
   }
 
   Log.create({
@@ -83,19 +95,16 @@ export async function publishService(service: ServiceRow): Promise<void> {
 
 export async function unpublishService(service: ServiceRow): Promise<void> {
   const servePath = getServiceServePath(service.name);
-
-  // Remove published files
   await fs.remove(servePath);
 
-  // Remove cached repo
-  const cacheDir = getServiceCachePath(service.name);
-  await fs.remove(cacheDir);
+  if (service.source_type === 'git') {
+    const cacheDir = getServiceCachePath(service.name);
+    await fs.remove(cacheDir);
+    await deleteWebhook(service);
+    Service.setWebhookId(service.id, null);
+  }
+  // zip 服务保留存档包，便于重新发布
 
-  // Delete webhook from Gogs
-  await deleteWebhook(service);
-  Service.setWebhookId(service.id, null);
-
-  // Update status
   Service.updateStatus(service.id, 'unpublished');
 
   Log.create({
@@ -106,29 +115,44 @@ export async function unpublishService(service: ServiceRow): Promise<void> {
   });
 }
 
-export async function updateService(service: ServiceRow): Promise<void> {
+async function updateGitService(service: ServiceRow): Promise<void> {
   const cacheDir = getServiceCachePath(service.name);
   const tmpDir = getServiceTmpPath(service.name);
 
-  // If cache doesn't exist, do a full publish
-  if (!await fs.pathExists(cacheDir)) {
-    await publishService(service);
-    return;
+  await pullRepo(cacheDir, service);
+  await fs.remove(tmpDir);
+  await copyPublishDir(cacheDir, service.publish_dir, tmpDir);
+  await atomicSwitch(service.name, tmpDir);
+  Service.updateLastUpdate(service.id);
+}
+
+async function updateZipService(service: ServiceRow): Promise<void> {
+  if (!await hasArchive(service.name)) {
+    throw new Error('存档包不存在，请先上传 zip 文件');
   }
 
+  const tmpDir = getServiceTmpPath(service.name);
+  const extractDir = await extractArchive(service.name);
+
+  await fs.remove(tmpDir);
+  await copyPublishDir(extractDir, service.publish_dir, tmpDir);
+  await atomicSwitch(service.name, tmpDir);
+  Service.updateLastUpdate(service.id);
+}
+
+export async function updateService(service: ServiceRow): Promise<void> {
   try {
-    // Pull latest in cache
-    await pullRepo(cacheDir, service);
-
-    // Copy publish dir to tmp
-    await fs.remove(tmpDir);
-    await copyPublishDir(cacheDir, service.publish_dir, tmpDir);
-
-    // Atomic switch
-    await atomicSwitch(service.name, tmpDir);
-
-    // Update timestamp
-    Service.updateLastUpdate(service.id);
+    if (service.source_type === 'zip') {
+      await updateZipService(service);
+    } else {
+      const cacheDir = getServiceCachePath(service.name);
+      // 缓存不存在时走完整发布流程
+      if (!await fs.pathExists(cacheDir)) {
+        await publishService(service);
+        return;
+      }
+      await updateGitService(service);
+    }
 
     Log.create({
       service_id: service.id,
@@ -152,16 +176,17 @@ export async function deleteService(service: ServiceRow): Promise<void> {
   const cacheDir = getServiceCachePath(service.name);
   const tmpDir = getServiceTmpPath(service.name);
 
-  // Remove all files
   await Promise.all([
     fs.remove(servePath),
     fs.remove(cacheDir),
     fs.remove(tmpDir),
   ]);
 
-  // Delete webhook
-  await deleteWebhook(service);
+  if (service.source_type === 'git') {
+    await deleteWebhook(service);
+  } else {
+    await removeArchive(service.name);
+  }
 
-  // Delete from DB (logs cascade)
   Service.delete(service.id);
 }

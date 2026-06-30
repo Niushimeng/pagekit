@@ -7,11 +7,14 @@ export default function ServiceForm() {
   const navigate = useNavigate();
   const isEdit = !!id;
 
+  const [sourceType, setSourceType] = useState<api.SourceType>('git');
   const [name, setName] = useState('');
   const [gitUrl, setGitUrl] = useState('');
   const [credentialId, setCredentialId] = useState('');
   const [branch, setBranch] = useState('');
   const [publishDir, setPublishDir] = useState('');
+  const [archiveFile, setArchiveFile] = useState<File | null>(null);
+  const [hasArchive, setHasArchive] = useState(false);
   const [credentials, setCredentials] = useState<any[]>([]);
   const [branches, setBranches] = useState<string[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
@@ -24,22 +27,24 @@ export default function ServiceForm() {
     api.getCredentials().then(setCredentials);
     if (id) {
       api.getService(id).then((s) => {
+        setSourceType(s.source_type || 'git');
         setName(s.name);
-        setGitUrl(s.git_url);
-        setCredentialId(s.credential_id);
-        setBranch(s.branch);
-        setInitialBranch(s.branch);
-        setPublishDir(s.publish_dir);
+        setGitUrl(s.git_url || '');
+        setCredentialId(s.credential_id || '');
+        setBranch(s.branch || '');
+        setInitialBranch(s.branch || '');
+        setPublishDir(s.publish_dir || '');
+        setHasArchive(!!s.has_archive);
       });
     }
   }, [id]);
 
-  // 填写仓库地址并选择凭证后，自动拉取远程分支
+  // Git 服务：填写仓库地址并选择凭证后，自动拉取远程分支
   useEffect(() => {
-    if (!gitUrl.trim() || !credentialId) {
+    if (sourceType !== 'git' || !gitUrl.trim() || !credentialId) {
       setBranches([]);
       setBranchesError('');
-      if (!isEdit) setBranch('');
+      if (!isEdit && sourceType === 'git') setBranch('');
       return;
     }
 
@@ -58,7 +63,6 @@ export default function ServiceForm() {
           return;
         }
 
-        // 编辑时保留原分支；新建或原分支不存在时选默认分支
         const keepCurrent = branch && data.branches.includes(branch);
         const keepInitial = initialBranch && data.branches.includes(initialBranch);
         if (keepCurrent) {
@@ -84,9 +88,8 @@ export default function ServiceForm() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [gitUrl, credentialId]);
+  }, [gitUrl, credentialId, sourceType]);
 
-  // Auto-extract repo name from git URL
   const handleGitUrlChange = (url: string) => {
     setGitUrl(url);
     if (!name || !isEdit) {
@@ -101,7 +104,7 @@ export default function ServiceForm() {
     e.preventDefault();
     setError('');
 
-    if (!branch) {
+    if (sourceType === 'git' && !branch) {
       setError('请选择分支');
       return;
     }
@@ -110,9 +113,23 @@ export default function ServiceForm() {
 
     try {
       if (isEdit) {
-        await api.updateService(id!, { name, git_url: gitUrl, credential_id: credentialId, branch, publish_dir: publishDir });
+        if (sourceType === 'git') {
+          await api.updateService(id!, { name, git_url: gitUrl, credential_id: credentialId, branch, publish_dir: publishDir });
+        } else {
+          await api.updateService(id!, { name, publish_dir: publishDir });
+          if (archiveFile) {
+            await api.uploadArchive(id!, archiveFile);
+          }
+        }
       } else {
-        await api.createService({ name, git_url: gitUrl, credential_id: credentialId, branch, publish_dir: publishDir });
+        const payload: any = { name, source_type: sourceType, publish_dir: publishDir };
+        if (sourceType === 'git') {
+          Object.assign(payload, { git_url: gitUrl, credential_id: credentialId, branch });
+        }
+        const service = await api.createService(payload);
+        if (sourceType === 'zip' && archiveFile) {
+          await api.uploadArchive(service.id, archiveFile);
+        }
       }
       navigate('/');
     } catch (err: any) {
@@ -122,7 +139,8 @@ export default function ServiceForm() {
     }
   };
 
-  const canSelectBranch = !!gitUrl.trim() && !!credentialId;
+  const canSelectBranch = sourceType === 'git' && !!gitUrl.trim() && !!credentialId;
+  const gitSubmitDisabled = sourceType === 'git' && (branchesLoading || !branch);
 
   return (
     <div className="page">
@@ -133,27 +151,56 @@ export default function ServiceForm() {
       <form onSubmit={handleSubmit} className="form-card">
         {error && <div className="alert alert-error">{error}</div>}
 
-        <div className="form-group">
-          <label>Git 仓库地址 *</label>
-          <input
-            type="text"
-            value={gitUrl}
-            onChange={(e) => handleGitUrlChange(e.target.value)}
-            placeholder="https://gogs.example.com/owner/repo.git"
-            required
-          />
-        </div>
+        {/* 创建时可选来源类型；编辑时只读展示 */}
+        {!isEdit ? (
+          <div className="source-type-tabs">
+            <button
+              type="button"
+              className={`source-type-tab ${sourceType === 'git' ? 'active' : ''}`}
+              onClick={() => setSourceType('git')}
+            >
+              Git 仓库
+            </button>
+            <button
+              type="button"
+              className={`source-type-tab ${sourceType === 'zip' ? 'active' : ''}`}
+              onClick={() => setSourceType('zip')}
+            >
+              Zip 包
+            </button>
+          </div>
+        ) : (
+          <div className="form-group">
+            <label>来源类型</label>
+            <div className="readonly-field">{sourceType === 'git' ? 'Git 仓库' : 'Zip 包'}</div>
+          </div>
+        )}
 
-        <div className="form-group">
-          <label>凭证 *</label>
-          <select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} required>
-            <option value="">请选择凭证</option>
-            {credentials.map((c) => (
-              <option key={c.id} value={c.id}>{c.name} ({c.username})</option>
-            ))}
-          </select>
-          <small>还没有凭证？<a href="#" onClick={(e) => { e.preventDefault(); navigate('/credentials'); }}>去创建</a></small>
-        </div>
+        {sourceType === 'git' && (
+          <>
+            <div className="form-group">
+              <label>Git 仓库地址 *</label>
+              <input
+                type="text"
+                value={gitUrl}
+                onChange={(e) => handleGitUrlChange(e.target.value)}
+                placeholder="https://gogs.example.com/owner/repo.git"
+                required
+              />
+            </div>
+
+            <div className="form-group">
+              <label>凭证 *</label>
+              <select value={credentialId} onChange={(e) => setCredentialId(e.target.value)} required>
+                <option value="">请选择凭证</option>
+                {credentials.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name} ({c.username})</option>
+                ))}
+              </select>
+              <small>还没有凭证？<a href="#" onClick={(e) => { e.preventDefault(); navigate('/credentials'); }}>去创建</a></small>
+            </div>
+          </>
+        )}
 
         <div className="form-row">
           <div className="form-group">
@@ -170,28 +217,30 @@ export default function ServiceForm() {
             <small>用于访问地址: {`{host}`}/{name || '...'}</small>
           </div>
 
-          <div className="form-group">
-            <label>分支 *</label>
-            <select
-              value={branch}
-              onChange={(e) => setBranch(e.target.value)}
-              required
-              disabled={!canSelectBranch || branchesLoading || branches.length === 0}
-            >
-              {!canSelectBranch && <option value="">请先填写仓库地址并选择凭证</option>}
-              {canSelectBranch && branchesLoading && <option value="">加载分支中...</option>}
-              {canSelectBranch && !branchesLoading && branches.length === 0 && (
-                <option value="">无可用分支</option>
+          {sourceType === 'git' && (
+            <div className="form-group">
+              <label>分支 *</label>
+              <select
+                value={branch}
+                onChange={(e) => setBranch(e.target.value)}
+                required
+                disabled={!canSelectBranch || branchesLoading || branches.length === 0}
+              >
+                {!canSelectBranch && <option value="">请先填写仓库地址并选择凭证</option>}
+                {canSelectBranch && branchesLoading && <option value="">加载分支中...</option>}
+                {canSelectBranch && !branchesLoading && branches.length === 0 && (
+                  <option value="">无可用分支</option>
+                )}
+                {branches.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+              {branchesError && <small className="text-error">{branchesError}</small>}
+              {canSelectBranch && !branchesLoading && branches.length > 0 && (
+                <small>已从远程仓库拉取 {branches.length} 个分支</small>
               )}
-              {branches.map((b) => (
-                <option key={b} value={b}>{b}</option>
-              ))}
-            </select>
-            {branchesError && <small className="text-error">{branchesError}</small>}
-            {canSelectBranch && !branchesLoading && branches.length > 0 && (
-              <small>已从远程仓库拉取 {branches.length} 个分支</small>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         <div className="form-group">
@@ -200,13 +249,30 @@ export default function ServiceForm() {
             type="text"
             value={publishDir}
             onChange={(e) => setPublishDir(e.target.value)}
-            placeholder="留空则发布仓库根目录，如 dist、build"
+            placeholder={sourceType === 'git' ? '留空则发布仓库根目录，如 dist、build' : '留空则发布 zip 根目录，如 dist、build'}
           />
-          <small>相对于仓库根目录的子目录路径</small>
+          <small>{sourceType === 'git' ? '相对于仓库根目录的子目录路径' : '相对于 zip 解压根目录的子目录路径'}</small>
         </div>
 
+        {sourceType === 'zip' && (
+          <div className="form-group">
+            <label>Zip 存档包{isEdit ? '' : '（可选）'}</label>
+            <input
+              type="file"
+              accept=".zip"
+              onChange={(e) => setArchiveFile(e.target.files?.[0] || null)}
+            />
+            {isEdit && hasArchive && !archiveFile && (
+              <small>当前已有存档包；选择新文件可替换</small>
+            )}
+            {!isEdit && (
+              <small>可创建后再上传；发布前需有存档包</small>
+            )}
+          </div>
+        )}
+
         <div className="form-actions">
-          <button type="submit" className="btn btn-primary" disabled={loading || branchesLoading || !branch}>
+          <button type="submit" className="btn btn-primary" disabled={loading || gitSubmitDisabled}>
             {loading ? '保存中...' : (isEdit ? '保存' : '创建')}
           </button>
           <button type="button" className="btn btn-ghost" onClick={() => navigate('/')}>取消</button>

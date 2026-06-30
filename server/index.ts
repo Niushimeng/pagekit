@@ -15,6 +15,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.locals.maxArchiveSize = config.maxArchiveSize;
 
 // Public routes
 app.use('/api/auth', authRoutes);

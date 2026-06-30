@@ -1,3 +1,5 @@
+export type SourceType = 'git' | 'zip';
+
 export interface AppConfig {
   port: number;
   host: string;
@@ -10,6 +12,8 @@ export interface AppConfig {
   publishDir: string;
   tmpDir: string;
   oldDir: string;
+  /** zip 上传大小上限（字节），默认 50MB */
+  maxArchiveSize: number;
 }
 
 export interface CredentialRow {
@@ -24,9 +28,10 @@ export interface CredentialRow {
 export interface ServiceRow {
   id: string;
   name: string;
-  git_url: string;
-  credential_id: string;
-  branch: string;
+  source_type: SourceType;
+  git_url: string | null;
+  credential_id: string | null;
+  branch: string | null;
   publish_dir: string;
   status: 'unpublished' | 'published';
   webhook_secret: string | null;
@@ -36,6 +41,8 @@ export interface ServiceRow {
   created_at: string;
   updated_at: string;
   credential_name?: string;
+  /** 是否已有存档包（仅 zip 服务，运行时计算） */
+  has_archive?: boolean;
 }
 
 export interface LogRow {
