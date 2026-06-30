@@ -7,13 +7,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# 安装服务端依赖
+# 安装全部依赖（含 typescript，用于编译服务端）
 COPY package.json package-lock.json* ./
-RUN npm ci --production
+RUN npm ci
 
 COPY tsconfig.server.json ./
 COPY server/ ./server/
-RUN npx tsc -p tsconfig.server.json
+RUN npm run server:build
+
+# 编译完成后移除 devDependencies，减小运行镜像体积
+RUN npm prune --omit=dev
 
 # 构建前端
 COPY client/package.json client/package-lock.json* ./client/
