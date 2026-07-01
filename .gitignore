@@ -4,3 +4,7 @@ dist/
 dist-server/
 .env
 *.db
+
+# Pagekit CLI 认证缓存(JWT token,绝勿提交)
+.cache/pagekit/
+**/token.json
