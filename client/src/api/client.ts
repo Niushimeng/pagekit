@@ -66,6 +66,10 @@ export const login = (username: string, password: string) =>
     body: JSON.stringify({ username, password }),
   });
 
+// 用当前 web 会话换取一个免过期的 CLI token(pagekit skill 浏览器登录流程)
+export const getCliToken = () =>
+  request<{ token: string; username: string }>('/auth/cli-token', { method: 'POST' });
+
 // Credentials
 export const getCredentials = () => request<any[]>('/credentials');
 export const createCredential = (data: { name: string; username: string; password: string }) =>

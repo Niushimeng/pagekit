@@ -12,6 +12,7 @@
 - 🔑 凭证管理（Git 用户名密码，可复用）
 - 📱 二维码生成
 - 📋 操作日志
+- 🤖 命令行 skill(可接入 Claude Code),通过 REST API 控制已部署实例
 
 ## 技术栈
 
@@ -134,3 +135,23 @@ npm run dev
 ### Nginx 配置
 
 系统只负责将文件写入 `publishDir/<service-name>/`（Docker 下为 `/data/sites/<service-name>/`），由外部 Nginx 提供 HTTP 服务。参见 `nginx.conf`。
+
+## 命令行控制（Claude Code Skill）
+
+仓库内的 `skill/pagekit/` 提供一个零依赖的 `pagekit.js` 命令行封装，通过 REST API 控制一个**已部署**的 Pagekit 实例（服务发布/更新、凭证、日志、配置等），可作为 Claude Code skill 使用。
+
+```bash
+# 安装到 Claude Code skills 目录
+cp -r skill/pagekit ~/.claude/skills/
+chmod +x ~/.claude/skills/pagekit/pagekit.js
+
+# 填入目标实例地址（仅 host，不保存账号密码）
+vim ~/.claude/skills/pagekit/config.json
+
+# 使用
+node ~/.claude/skills/pagekit/pagekit.js service list
+```
+
+**认证模型**：不保存账号密码。首次操作时脚本启动本地服务并打开浏览器到 Pagekit 登录页，用户登录后浏览器把一个**免过期 JWT** 重定向回本地脚本并缓存到 `~/.cache/pagekit/token.json`，后续操作复用该 token；遇 401 自动重新登录一次。回调地址仅接受 loopback（`127.0.0.1`/`localhost`/`[::1]`）并带随机 `state` 防伪造。无头/CI 环境可用环境变量 `PAGEKIT_TOKEN` 直接注入已有 token。
+
+要作废已泄漏的 token，需在服务端轮换 `config.jwtSecret` 并重启（会同时使所有 web/CLI token 失效）。完整命令参考见 `skill/pagekit/SKILL.md` 与 `reference.md`。

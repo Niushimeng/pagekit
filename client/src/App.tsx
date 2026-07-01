@@ -16,7 +16,9 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
-  return isAuthenticated ? <Navigate to="/" replace /> : <>{children}</>;
+  // 带 redirect_uri 时是 CLI 登录流程,即便已登录也要进入 Login 完成 token 铸造与重定向
+  const hasCliRedirect = new URLSearchParams(window.location.search).has('redirect_uri');
+  return isAuthenticated && !hasCliRedirect ? <Navigate to="/" replace /> : <>{children}</>;
 }
 
 function AppRoutes() {

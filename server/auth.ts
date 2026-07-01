@@ -23,8 +23,14 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   }
 }
 
+// Web 会话 token,7d 过期(浏览器 localStorage)
 export function generateToken(): string {
-  return jwt.sign({ username: config.admin.username }, config.jwtSecret, { expiresIn: '7d' });
+  return jwt.sign({ username: config.admin.username, type: 'web' }, config.jwtSecret, { expiresIn: '7d' });
+}
+
+// CLI token,无过期时间,带 type:'cli' 标记(供 pagekit skill 缓存复用)
+export function generateCliToken(): string {
+  return jwt.sign({ username: config.admin.username, type: 'cli' }, config.jwtSecret);
 }
 
 export function verifyPassword(password: string): boolean {

@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { generateToken, verifyPassword } from '../auth';
+import { generateToken, generateCliToken, verifyPassword, authMiddleware, AuthRequest } from '../auth';
 import config from '../config';
 
 const router = Router();
@@ -26,6 +26,12 @@ router.post('/login', (req: Request, res: Response) => {
 router.get('/me', (req: Request, res: Response) => {
   // This will be protected by auth middleware in the main app
   res.json({ username: (req as any).user?.username });
+});
+
+// POST /api/auth/cli-token  (受 authMiddleware 保护)
+// 用现有 web 会话换取一个免过期的 CLI token,供 pagekit skill 长期缓存复用。
+router.post('/cli-token', authMiddleware, (req: AuthRequest, res: Response) => {
+  res.json({ token: generateCliToken(), username: req.user?.username ?? config.admin.username });
 });
 
 export default router;

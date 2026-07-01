@@ -51,3 +51,7 @@ _Avoid_: Output directory, build folder
 **Serving Location (发布位置)**:
 The filesystem path where published files are placed for the external web server to serve: `<publishDir>/<service-name>/` (Docker default: `/data/sites/<service-name>/`; local dev default: `./data/sites/<service-name>/`).
 _Avoid_: Output path, site root
+
+**Service Status (服务状态)**:
+The lifecycle state of a service's serving location: `published` (files are live at the serving location) or `unpublished` (no files are served). Defaults to `unpublished` at creation. `publish` transitions to `published`; `unpublish` transitions back. Stored as the `status` column. Independent of whether source artifacts (git cache or stored archive) exist.
+_Avoid_: Active/inactive, enabled/disabled
