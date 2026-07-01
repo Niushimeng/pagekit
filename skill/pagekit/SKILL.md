@@ -74,6 +74,19 @@ pagekit service publish <serviceId>
 
 > ⚠️ Zip 服务**必须先 `archive upload` 再 publish**,否则 publish 会因无存档包而失败。
 
+> ✅ **发布或更新成功后,必须直接向用户展示访问地址和二维码**,不要只回一句"发布/更新成功"。`publish` 与 `update` 接口仅返回 `{success:true, message}`,不含地址,因此成功后立即追加一步:
+>
+> ```bash
+> pagekit service qrcode-url <serviceId>
+> # → { "url": "https://<host>/<service-name>" }  —— 这个 url 就是访问地址,二维码编码的也是它
+> ```
+>
+> 然后向用户输出两样东西:
+> 1. **访问地址**:上面返回的 `url`(也可由 `${config.host}/${service.name}` 自行拼出);
+> 2. **二维码**:用 `pagekit service qrcode <serviceId>` 获取 PNG 二进制(可保存为文件或用二维码渲染工具展示),或直接把访问地址转成二维码。
+>
+> 此规则对 `service publish`、`service update`、`service trigger-webhook`(触发后产生新版本)均适用。
+
 ### 日常操作
 
 | 任务 | 命令 |
@@ -81,7 +94,7 @@ pagekit service publish <serviceId>
 | 列出服务(精简) | `pagekit service list` |
 | 列出服务(完整) | `pagekit service list --full` |
 | 查看详情 | `pagekit service get <id>` |
-| 更新文件版本 | `pagekit service update <id>` |
+| 更新文件版本 | `pagekit service update <id>`(成功后展示访问地址+二维码,见上文 ✅) |
 | 改配置(发布目录等) | `echo '{...}' \| pagekit service edit <id>` |
 | 取消发布 | `pagekit service unpublish <id>` |
 | 删除服务 | `pagekit service delete <id>` |
